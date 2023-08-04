@@ -1,10 +1,10 @@
-import ujson as json #external requirement.txt
-import requests #external
+import ujson as json 
+import requests
 import urllib.parse
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from tqdm import tqdm #external 
+from tqdm import tqdm 
 import logging
 import time
 import argparse
