@@ -3,9 +3,12 @@ The Script Downloads in bulk both model(Lora,Lycoris,Embeding etc..) and related
  and maintaining details in a text file.
 
 # How to  use
-
-
-
+```
+install Python3
+```
+```
+pip install -r requirements.txt
+```
 ```
 python civitAI_Model_downloader.py username 
 ```
