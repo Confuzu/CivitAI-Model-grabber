@@ -10,7 +10,7 @@ Model URL: https://civitai.com/models/ID
 File Name: Name of the Model.ending
 File URL: https://civitai.com/api/download/models/ID
 Image ID: ID
-Image URL: https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/79b864ff-362b-48d1-ed6a-cd0b19872100/width=450/ID.jpeg
+Image URL: https://image.civitai.com/Random_characters/width=450/ID.jpeg
 ```
 
 # How to  use
