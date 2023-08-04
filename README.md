@@ -3,8 +3,11 @@ The Script Downloads in bulk both model(Lora,Lycoris,Embeding etc..) and related
  and maintaining details in a text file.
 
 # How to  use
+
+
+
 ```
-python civitai_Model_downloader.py username 
+python civitAI_Model_downloader.py username 
 ```
 You  can also  give the script this 3 extra Arguments
 ```
