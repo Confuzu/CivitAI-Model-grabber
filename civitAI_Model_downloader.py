@@ -1,5 +1,6 @@
+import re
 import ujson as json 
-import requests
+import requests 
 import urllib.parse
 import os
 import threading
@@ -43,8 +44,21 @@ headers = {
 session = requests.Session()
 
 def sanitize_name(name):
-    # Function to replace spaces with underscores and remove slashes
-    return name.replace(' ', '_').replace('/', '-')
+    # Replace problematic characters with an underscore
+    name = re.sub(r'[\\/*?:"<>|]', '_', name)
+
+    # Replace multiple underscores with a single one
+    name = re.sub(r'__+', '_', name)
+
+    # Remove leading and trailing underscores
+    name = name.strip('_')
+
+    # Optionally truncate the name if it's too long
+    max_length = 255
+    if len(name) > max_length:
+        name = name[:max_length]
+
+    return name
 
 # Function to download a file or image from the provided URL
 def download_file_or_image(url, output_path):
@@ -73,6 +87,7 @@ file_lock = threading.Lock()
 
 # New function to download the related image and model files for each model version
 def download_model_files(item_name, model_version, item):
+    file_name = 'no_name'
     files = model_version.get('files', [])
     images = model_version.get('images', [])
     downloaded = False
