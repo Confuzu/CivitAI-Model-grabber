@@ -19,19 +19,26 @@ parser.add_argument("username", type=str, help="Enter username you want to downl
 parser.add_argument("--retry_delay", type=int, default=10, help="Retry delay in seconds.")
 parser.add_argument("--max_tries", type=int, default=3, help="Maximum number of retries.")
 parser.add_argument("--max_threads", type=int, default=5, help="Maximum number of concurrent threads.Too many produces API Failure.")
+parser.add_argument("--token", type=str, default=None, help="API Token for Civitai.")
 args = parser.parse_args()
+
+# Prompt the user for the token if it's not provided via command line
+if args.token is None:
+    args.token = input("Please enter your Civitai API token: ")
 
 # Command-line arguments
 username = args.username
 retry_delay = args.retry_delay
 max_tries = args.max_tries
 max_threads = args.max_threads
+token = args.token
 
 
 # Format the URL with username, types, and nsfw parameter
 base_url = "https://civitai.com/api/v1/models"
 params = {
     "username": username,
+    "token": token
 }
 url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
@@ -61,7 +68,7 @@ def sanitize_name(name):
     return name
 
 # Function to download a file or image from the provided URL
-def download_file_or_image(url, output_path):
+def download_file_or_image(url, output_path, retry_count=0, max_retries=3):
     progress_bar = None
     try:
         response = session.get(url, stream=True)
@@ -74,12 +81,27 @@ def download_file_or_image(url, output_path):
                     progress_bar.update(len(chunk))
                     file.write(chunk)
         progress_bar.close()
+
+        # Check file size after download, only for safetensor files
+        if output_path.endswith('.safetensor') and os.path.getsize(output_path) < 4 * 1024 * 1024:  # 4MB
+            if retry_count < max_retries:
+                print(f"File {output_path} is smaller than expected. Try to download again (attempt {retry_count + 1}).")
+                time.sleep(retry_delay)
+                download_file_or_image(url, output_path, retry_count + 1, max_retries)
+            else:
+                with open('download_errors.log', 'a') as log_file:
+                    log_file.write(f"Error downloading file {output_path} from URL {url}: File too small after {max_retries} attempts\n")
+
     except (requests.RequestException, TimeoutError, ConnectionResetError) as e:
         if progress_bar:
             progress_bar.close()
-        print(f"Error downloading: {url}")
-        time.sleep(retry_delay)
-        download_file_or_image(url, output_path)
+        if retry_count < max_retries:
+            print(f"Error during download: {url}, attempt{retry_count + 1}")
+            time.sleep(retry_delay)
+            download_file_or_image(url, output_path, retry_count + 1, max_retries)
+        else:
+            with open('download_errors.log', 'a') as log_file:
+                log_file.write(f"Error downloading file {output_path} from URL {url}: {e} to {max_retries} try\n")
 
 
 # Create a lock for thread-safe file writes
@@ -115,6 +137,12 @@ def download_model_files(item_name, model_version, item):
     for file in files:
         file_name = file.get('name', '')  # Use empty string as default if 'name' key is missing
         file_url = file.get('downloadUrl', '')  # Use empty string as default if 'downloadUrl' key is missing
+
+            # Add token to the file URL
+        if '?' in file_url:
+            file_url += f"&token={token}"
+        else:
+            file_url += f"?token={token}"
 
         # Skip download if the file already exists
         file_name_sanitized = sanitize_name(file_name)
