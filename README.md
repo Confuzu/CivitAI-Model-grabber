@@ -25,15 +25,33 @@ python civitAI_Model_downloader.py username
 ```
 You  can also  give the script this 3 extra Arguments
 ```
---retry_delay= 
+--retry_delay 
 ```
-default=10,"Retry delay in seconds."
++ default=10,
++ "Retry delay in seconds."
 ```
---max_tries=
+--max_tries
 ```
-default=3, "Maximum number of retries."
++ default=3,
++ "Maximum number of retries."
 ```
---max_threads=
+--max_threads
 ```
- default=5, "Maximum number of concurrent threads.Too many produces API Failure."
+ + default=5, 
+ + "Maximum number of concurrent threads.Too many produces API Failure."
+```
+--token 
+```
+default=None
++ "It will only Download the Public availabe Models"
++ "Provide a Token and it can also Download those Models behind the CivitAI Login."
++ If you forgot to Provide a Token the Script asks for your token.
+
+You can create your API Key here
+ [Account Settings](https://civitai.com/user/account).
+ Scoll down until  the end and you  find this Box
+ 
+
+
+![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
 
