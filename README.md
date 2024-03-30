@@ -21,7 +21,7 @@ install Python3
 pip install -r requirements.txt
 ```
 ```
-python civitAI_Model_downloader.py username 
+python civitAI_Model_downloader.py one or multiple usernames space separated
 ```
 You  can also  give the script this 3 extra Arguments
 ```
@@ -54,4 +54,10 @@ You can create your API Key here
 
 
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
+
+
+#Updates & Bugfixes
+
+Pagination is fixed 
+New Function Multiple Usernames 
 
