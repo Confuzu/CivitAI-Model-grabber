@@ -56,7 +56,7 @@ You can create your API Key here
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
 
 
-#Updates & Bugfixes
+# Updates & Bugfixes
 
 Pagination is fixed 
 New Function Multiple Usernames 
