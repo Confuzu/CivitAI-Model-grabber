@@ -58,6 +58,6 @@ You can create your API Key here
 
 # Updates & Bugfixes
 
-Pagination is fixed 
-New Function Multiple Usernames 
+Pagination is fixed <br /> 
+New Function Multiple Usernames <br /> 
 
