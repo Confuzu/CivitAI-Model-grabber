@@ -13,6 +13,12 @@ Image ID: ID
 Image URL: https://image.civitai.com/Random_characters/width=450/ID.jpeg
 ```
 
+# Updates & Bugfixes
+
+Pagination is fixed <br /> 
+New Function Multiple Usernames <br /> 
+
+
 # How to  use
 ```
 install Python3
@@ -54,10 +60,3 @@ You can create your API Key here
 
 
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
-
-
-# Updates & Bugfixes
-
-Pagination is fixed <br /> 
-New Function Multiple Usernames <br /> 
-
