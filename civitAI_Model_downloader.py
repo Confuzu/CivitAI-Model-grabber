@@ -44,7 +44,7 @@ def process_username(username):
         "username": username,
         "token": token
     }
-    url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    url = f"{base_url}?{urllib.parse.urlencode(params)}&nsfw=true"
 
     # Set the headers
     headers = {
@@ -120,9 +120,9 @@ def process_username(username):
             file_url = file.get('downloadUrl', '')  # Use empty string as default if 'downloadUrl' key is missing
             # Add token to the file URL
             if '?' in file_url:
-                file_url += f"&token={token}"
+                file_url += f"&token={token}&nsfw=true"
             else:
-                file_url += f"?token={token}"
+                file_url += f"?token={token}&nsfw=true"
             # Skip download if the file already exists
             file_name_sanitized = sanitize_name(file_name)
             file_path = os.path.join(item_dir, file_name_sanitized)
