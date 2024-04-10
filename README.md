@@ -15,8 +15,8 @@ Image URL: https://image.civitai.com/Random_characters/width=450/ID.jpeg
 
 # Updates & Bugfixes
 
-Better Errorhandling 
-New function to avoid OSError: [Errno 36] File name too long:
+Better Errorhandling <br /> 
+New function to avoid OSError: [Errno 36] File name too long: <br /> 
 
 Pagination is fixed <br /> 
 New Function Multiple Usernames <br /> 
