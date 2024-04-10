@@ -37,6 +37,8 @@ max_tries = args.max_tries
 max_threads = args.max_threads
 token = args.token
 
+max_path_length = 255
+
 def process_username(username):
     # Format the URL with username, types, and nsfw parameter
     base_url = "https://civitai.com/api/v1/models"
@@ -54,24 +56,42 @@ def process_username(username):
     # Create a session object for making multiple requests
     session = requests.Session()
 
-    def sanitize_name(name):
+    def sanitize_name(name, folder_name=None, max_length=255):
+        # Split the name into base name and extension
+        base_name, extension = os.path.splitext(name)
+
+        # Remove the folder name from the base name if provided
+        if folder_name:
+            base_name = base_name.replace(folder_name, "").strip("_")
+
         # Replace problematic characters with an underscore
-        name = re.sub(r'[\\/*?:"<>|]', '_', name)
+        base_name = re.sub(r'[\\/*?:"<>|]', '_', base_name)
+
         # Replace multiple underscores with a single one
-        name = re.sub(r'__+', '_', name)
+        base_name = re.sub(r'__+', '_', base_name)
+
         # Remove leading and trailing underscores
-        name = name.strip('_')
-        # Optionally truncate the name if it's too long
-        max_length = 255
-        if len(name) > max_length:
-            name = name[:max_length]
-        return name
+        base_name = base_name.strip('_')
+
+        # Truncate the base name if it's too long
+        max_base_length = max_length - len(extension)
+        if len(base_name) > max_base_length:
+            base_name = base_name[:max_base_length]
+
+        # Combine the sanitized base name and extension
+        sanitized_name = base_name + extension
+
+        return sanitized_name
+
 
     # Function to download a file or image from the provided URL
     def download_file_or_image(url, output_path, retry_count=0, max_retries=3):
         progress_bar = None
         try:
             response = session.get(url, stream=True)
+            if response.status_code == 404:
+                print(f"File not found: {url}")
+                return
             response.raise_for_status()
             total_size = int(response.headers.get('content-length', 0))
             progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, leave=False)
@@ -109,7 +129,10 @@ def process_username(username):
         model_id = item['id']
         model_url = f"https://civitai.com/models/{model_id}"
         item_name_sanitized = sanitize_name(item_name)
-        item_dir = os.path.join(output_dir, username, item_name_sanitized)  # Use the username here
+        item_dir = os.path.join(output_dir, username, item_name_sanitized)  # Use the sanitized item name here
+        if len(item_dir) > max_path_length:
+            print(f"Warning: Skipping item '{item_name}' due to path length exceeding the limit.")
+            return item_name, downloaded, {}
         os.makedirs(item_dir, exist_ok=True)
         existing_files_count = sum(os.path.exists(os.path.join(item_dir, sanitize_name(file.get('name', '')))) for file in files)
         if existing_files_count == len(files):
@@ -124,8 +147,11 @@ def process_username(username):
             else:
                 file_url += f"?token={token}&nsfw=true"
             # Skip download if the file already exists
-            file_name_sanitized = sanitize_name(file_name)
-            file_path = os.path.join(item_dir, file_name_sanitized)
+            file_name_sanitized = sanitize_name(file_name, item_name)
+            file_path = os.path.join(item_dir, file_name_sanitized)  # Use the sanitized file name here
+            if len(file_path) > max_path_length:
+                print(f"Warning: Skipping file '{file_name}' due to path length exceeding the limit.")
+                continue
             if os.path.exists(file_path):
                 continue
             # Skip if 'name' or 'downloadUrl' keys are missing
@@ -149,8 +175,11 @@ def process_username(username):
             image_url = image.get('url', '')  # Use empty string as default if 'url' key is missing
             # Skip download if the image already exists
             image_filename_raw = f"{item_name}_{image_id}_for_{file_name}.jpeg"
-            image_filename_sanitized = sanitize_name(image_filename_raw)
-            image_path = os.path.join(item_dir, image_filename_sanitized)
+            image_filename_sanitized = sanitize_name(image_filename_raw, item_name)
+            image_path = os.path.join(item_dir, image_filename_sanitized)  # Use the sanitized image filename here
+            if len(image_path) > max_path_length:
+                print(f"Warning: Skipping image '{image_filename_raw}' due to path length exceeding the limit.")
+                continue
             if os.path.exists(image_path):
                 continue
             # Skip if 'id' or 'url' keys are missing
