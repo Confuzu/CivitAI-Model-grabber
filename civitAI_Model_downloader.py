@@ -56,10 +56,14 @@ def process_username(username, download_type):
     # Create a session object for making multiple requests
     session = requests.Session()
 
-    def sanitize_name(name, folder_name=None, max_length=200):
+    failed_downloads_file = f"failed_downloads_{username}.txt"
+    with open(failed_downloads_file, "w") as f:
+        f.write(f"Failed Downloads for Username: {username}\n\n")
+
+    def sanitize_name(name, folder_name=None, max_length=200, subfolder=None):
         # Split the name into base name and extension
         base_name, extension = os.path.splitext(name)
-    
+
         # Check if the base name matches the folder name
         if folder_name and base_name == folder_name:
             # If the base name matches the folder name, use the original name
@@ -68,24 +72,34 @@ def process_username(username, download_type):
             # Remove the folder name from the base name if provided
             if folder_name:
                 base_name = base_name.replace(folder_name, "").strip("_")
-    
+
             # Replace problematic characters with an underscore
-            base_name = re.sub(r'[\\/*?:"<>|]', '_', base_name)
-    
+            base_name = re.sub(r'[<>:"/\\|?*\'\’\‘\“\”]', '_', base_name)
+            base_name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '_', base_name)
+
+            # Replace reserved names with an underscore
+            reserved_names = ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"]
+            base_name = '_' if base_name.upper() in reserved_names else base_name
+
             # Replace multiple underscores with a single one
             base_name = re.sub(r'__+', '_', base_name)
-    
-            # Remove leading and trailing underscores
-            base_name = base_name.strip('_')
-    
-            # Truncate the base name if it's too long
-            max_base_length = max_length - len(extension)
+
+            # Remove leading and trailing underscores and dots
+            base_name = base_name.strip('_.')
+
+            # Calculate the maximum allowed length for the base name
+            if subfolder:
+                max_base_length = max_length - len(extension) - len(os.path.join(output_dir, username, subfolder))
+            else:
+                max_base_length = max_length - len(extension)
+
+            # Truncate the base name if it exceeds the maximum allowed length
             if len(base_name) > max_base_length:
                 base_name = base_name[:max_base_length]
-    
+
             # Combine the sanitized base name and extension
             sanitized_name = base_name + extension
-    
+
         return sanitized_name
 
     # Function to download a file or image from the provided URL
@@ -127,13 +141,13 @@ def process_username(username, download_type):
 
         # New function to download the related image and model files for each model version
     
-    def download_model_files(item_name, model_version, item, download_type):
+    def download_model_files(item_name, model_version, item, download_type, failed_downloads_file):
         files = model_version.get('files', [])
         images = model_version.get('images', [])
         downloaded = False
         model_id = item['id']
         model_url = f"https://civitai.com/models/{model_id}"
-        item_name_sanitized = sanitize_name(item_name)
+        item_name_sanitized = sanitize_name(item_name, max_length=260)
         model_images = {}  # Initialize the model_images dictionary
         item_dir = None  # Initialize item_dir to None
 
@@ -162,11 +176,14 @@ def process_username(username, download_type):
                 continue
 
             item_dir = os.path.join(output_dir, username, subfolder, item_name_sanitized)
-            if len(item_dir) > max_path_length:
-                print(f"Warning: Skipping item '{item_name}' due to path length exceeding the limit.")
-                continue
-
-            os.makedirs(item_dir, exist_ok=True)
+            try:
+                os.makedirs(item_dir, exist_ok=True)
+            except OSError as e:
+                with open(failed_downloads_file, "a") as f:
+                    f.write(f"Item Name: {item_name}\n")
+                    f.write(f"Model URL: {model_url}\n")
+                    f.write("---\n")
+                return item_name, False, model_images
     
             # Add token to the file URL
             if '?' in file_url:
@@ -175,11 +192,8 @@ def process_username(username, download_type):
                 file_url += f"?token={token}&nsfw=true"
     
             # Skip download if the file already exists
-            file_name_sanitized = sanitize_name(file_name, item_name)
+            file_name_sanitized = sanitize_name(file_name, item_name, max_length=260, subfolder=subfolder)
             file_path = os.path.join(item_dir, file_name_sanitized)
-            if len(file_path) > max_path_length:
-                print(f"Warning: Skipping file '{file_name}' due to path length exceeding the limit.")
-                continue
             if os.path.exists(file_path):
                 continue
             
@@ -193,7 +207,11 @@ def process_username(username, download_type):
                 download_file_or_image(file_url, file_path)
                 downloaded = True
             except (requests.RequestException, TimeoutError):
-                print(f"Error downloading file: {file_url}")
+                with open(failed_downloads_file, "a") as f:
+                    f.write(f"Item Name: {item_name}\n")
+                    f.write(f"File URL: {file_url}\n")
+                    f.write("---\n")
+
     
             # Update the details file
             details_file = os.path.join(item_dir, "details.txt")
@@ -209,12 +227,9 @@ def process_username(username, download_type):
 
                 # Generate the image filename
                 image_filename_raw = f"{item_name}_{image_id}_for_{file_name}.jpeg"
-                image_filename_sanitized = sanitize_name(image_filename_raw, item_name)
+                image_filename_sanitized = sanitize_name(image_filename_raw, item_name, max_length=260, subfolder=subfolder)
                 image_path = os.path.join(item_dir, image_filename_sanitized)
 
-                if len(image_path) > max_path_length:
-                    print(f"Warning: Skipping image '{image_filename_raw}' due to path length exceeding the limit.")
-                    continue
                 if os.path.exists(image_path):
                     continue
                 
@@ -228,7 +243,10 @@ def process_username(username, download_type):
                     download_file_or_image(image_url, image_path)
                     downloaded = True
                 except (requests.RequestException, TimeoutError):
-                    print(f"Error downloading image: {image_url}")
+                    with open(failed_downloads_file, "a") as f:
+                        f.write(f"Item Name: {item_name}\n")
+                        f.write(f"Image URL: {image_url}\n")
+                        f.write("---\n")
 
                 # Update the details file
                 details_file = os.path.join(item_dir, "details.txt")
@@ -303,7 +321,7 @@ def process_username(username, download_type):
             downloaded_item_names.add(item_name)
 
             for version in model_versions:
-                future = executor.submit(download_model_files, item_name, version, item, download_type)
+                future = executor.submit(download_model_files, item_name, version, item, download_type, failed_downloads_file)
                 download_futures.append(future)
         
         download_results = []
@@ -336,3 +354,4 @@ else:
 for username in usernames:
     process_username(username, download_type)
     print(f"Download completed for username: {username}")
+    
