@@ -63,6 +63,15 @@ You can create your API Key here
 
  # Updates & Bugfixes
 
+# Bugfix
+
+Enhanced Character Filtering: <br /> 
+The script has been modified to extensively filter out forbidden and problematic characters to prevent issues during the folder creation process. <br />
+
+Error Handling Improvements: <br />
+In cases where the script encounters characters that prevent folder creation, it now logs the name and URL of the affected download. <br /> 
+This information is recorded in a pre-existing text file, which is automatically named after the user whose content is being downloaded. This update allows users to manually complete downloads if issues arise.<br />
+
  # 0.2 New Features & Update & Bugfix 
 New long awaited Feature <br /> 
 
