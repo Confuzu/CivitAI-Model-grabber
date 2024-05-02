@@ -179,7 +179,7 @@ def process_username(username, download_type):
             try:
                 os.makedirs(item_dir, exist_ok=True)
             except OSError as e:
-                with open(failed_downloads_file, "a") as f:
+                with open(failed_downloads_file, "a", encoding='utf-8') as f:
                     f.write(f"Item Name: {item_name}\n")
                     f.write(f"Model URL: {model_url}\n")
                     f.write("---\n")
