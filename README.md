@@ -4,7 +4,7 @@ The script Supports different download types: Lora, Checkpoints, Embeddings, Tra
 It's designed to download only the files that are not already present in the specified username's folder.
 If the user uploads new models, running the script again will download only the newly uploaded files.
 
-Example of Details.txt 
+**Example of Details.txt** 
 ```
 Model URL: https://civitai.com/models/ID
 File Name: Name of the Model.ending
@@ -13,7 +13,7 @@ Image ID: ID
 Image URL: https://image.civitai.com/Random_characters/width=450/ID.jpeg
 ```
 
-File Structure  <br /> 
+**File Structure**  <br /> 
 The downloaded files will be organized in the following structure:
 ```
 model_downloads/
@@ -21,7 +21,6 @@ model_downloads/
 │   ├── Lora/
 │   │   ├── model1/
 │   │   │   ├── file1.safetensors
-│   │   │   ├── file2.pt
 │   │   │   ├── image1.jpeg
 │   │   │   └── details.txt
 │   │   └── model2/
@@ -83,7 +82,10 @@ default=None
 + "Provide a Token and it can also Download those Models behind the CivitAI Login."
 + If you forgot to Provide a Token the Script asks for your token.
 
-
+**Helper script** `fetch_all_models.py`
+```
+python fetch_all_models.py --username <USERNAME> --token <API_TOKEN>
+```
 
 You can create your API Key here
  [Account Settings](https://civitai.com/user/account).
