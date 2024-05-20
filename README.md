@@ -1,5 +1,5 @@
 # Civit-Model-grabber
-The script downloads models (such as Lora, Lycoris, Embedding, etc.) and related images from a given CivitAI username, organizing them into appropriate directories and maintaining details in a text file. 
+The script Supports different download types: Lora, Checkpoints, Embeddings, Training Data, Other, or All and related images from a given CivitAI username, organizing them into appropriate directories and maintaining details in a text file. 
 
 It's designed to download only the files that are not already present in the specified username's folder.
 If the user uploads new models, running the script again will download only the newly uploaded files.
@@ -11,6 +11,33 @@ File Name: Name of the Model.ending
 File URL: https://civitai.com/api/download/models/ID
 Image ID: ID
 Image URL: https://image.civitai.com/Random_characters/width=450/ID.jpeg
+```
+
+File Structure  <br /> 
+The downloaded files will be organized in the following structure:
+```
+model_downloads/
+├── username1/
+│   ├── Lora/
+│   │   ├── model1/
+│   │   │   ├── file1.safetensors
+│   │   │   ├── file2.pt
+│   │   │   ├── image1.jpeg
+│   │   │   └── details.txt
+│   │   └── model2/
+│   │       ├── file3.safetensors
+│   │       ├── image2.jpeg
+│   │       └── details.txt
+│   ├── Checkpoints/
+│   ├── Embeddings/
+│   ├── Training_Data/
+│   └── Other/
+└── username2/
+    ├── Lora/
+    ├── Checkpoints/
+    ├── Embeddings/
+    ├── Training_Data/
+    └── Other/
 ```
 
 # How to  use
@@ -45,6 +72,7 @@ You  can also  give the script this 5 extra Arguments
 + Lora
 + Checkpoints
 + Embeddings
++ Training_Data
 + Other
 + Default = All
 ```
@@ -55,6 +83,8 @@ default=None
 + "Provide a Token and it can also Download those Models behind the CivitAI Login."
 + If you forgot to Provide a Token the Script asks for your token.
 
+
+
 You can create your API Key here
  [Account Settings](https://civitai.com/user/account).
  Scoll down until  the end and you  find this Box
@@ -62,6 +92,40 @@ You can create your API Key here
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
 
  # Updates & Bugfixes
+
+# 0.4 New Features & Updates & Bugfixes 
+
+### New features:
+- **Download option for Training_Data added:**
+  - Automatically creates its own download folder.
+  - Saves downloaded ZIP packages, associated images and a `detail.txt` file.
+  
+- **Introduction of a helper script `fetch_all_models.py`:**
+  - Retrieves model information from the CivitAI API based on username and API token.
+  - Categorizes the results and summarizes them in a text file `{username}.txt`.
+  - Improves the overview of the user content and enables the statistics function.
+  - Can also be used standalone with the following command:  
+    `python fetch_all_models.py --username <USERNAME> --token <API_TOKEN>`
+
+### Updates:
+- **Detection and categorization of new types:**
+  - Script now recognizes the types VAE and Locon and assigns them to the category "Other".
+  
+- **Improvement of the filter for problematic characters:**
+  - Optimization of filter functions to better handle problematic characters.
+
+- **Code optimizations:**
+  - All global variables are now at the beginning of the script.
+  - No more functions inside other functions.
+  - Merge lines of code where appropriate for better readability and maintainability.
+  
+- **Correct allocation of ZIP packages:**
+  - ZIP packages are now downloaded to the appropriate folders according to API specifications, e.g. Training_Data, Lora, Other.
+  - ZIP packages without a specific category are still downloaded under "Other".
+
+### Bugfixes:
+- **Statistics fixed:**
+  - The statistics function is now based on the new helper script `fetch_all_models.py`, which improves accuracy and functionality.
 
 # 0.3 Bugfix & Changes
 
