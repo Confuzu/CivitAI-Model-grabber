@@ -80,7 +80,7 @@ def fetch_all_models(token, username):
 
     # Write the summary
     file_path = os.path.join(script_dir, f"{username}.txt")
-    with open(file_path, "w") as file:
+    with open(file_path, "w", encoding='utf-8') as file:
         file.write("Summary:\n")
         file.write(f"Total - Count: {total_count}\n")
         for category, items in categorized_items.items():
