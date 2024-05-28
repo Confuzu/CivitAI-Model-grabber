@@ -86,6 +86,38 @@ default=None
 ```
 python fetch_all_models.py --username <USERNAME> --token <API_TOKEN>
 ```
+**Example of username.txt** 
+```
+Summary:
+Total - Count: 61
+Checkpoints - Count: 12
+Embeddings - Count: 33
+Lora - Count: 11
+Training_Data - Count: 2
+Other - Count: 3
+
+Detailed Listing:
+Checkpoints - Count: 12
+Checkpoints - Item: NAME
+...
+
+Embeddings - Count: 33
+Embeddings - Item: NAME - Embeddings
+...
+
+Lora - Count: 11
+Lora - Item: NAME
+...
+
+Training_Data - Count: 2
+Training_Data - Item: NAME_training_data.zip
+...
+
+Other - Count: 3
+Other - Item: NAME - Type: Other
+...
+```
+
 
 You can create your API Key here
  [Account Settings](https://civitai.com/user/account).
