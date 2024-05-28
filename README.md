@@ -86,7 +86,7 @@ default=None
 ```
 python fetch_all_models.py --username <USERNAME> --token <API_TOKEN>
 ```
-**Example of username.txt** 
+**Example of username.txt created with helper script fetch_all_models.py**
 ```
 Summary:
 Total - Count: 61
