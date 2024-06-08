@@ -45,7 +45,12 @@ max_tries = args.max_tries
 max_threads = args.max_threads
 token = args.token
 
+# Function to sanitize directory names
+def sanitize_directory_name(name):
+    return name.rstrip()  # Remove trailing whitespace characters
+
 # Create output directory
+OUTPUT_DIR = sanitize_directory_name(OUTPUT_DIR)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Create session
@@ -111,7 +116,8 @@ def sanitize_name(name, folder_name=None, max_length=MAX_PATH_LENGTH, subfolder=
         base_name = base_name[:max_base_length].rsplit('_', 1)[0]
 
     sanitized_name = base_name + extension
-    return sanitized_name
+    return sanitized_name.strip()
+
 
 def download_file_or_image(url, output_path, retry_count=0, max_retries=max_tries):
     """Download a file or image from the provided URL."""
@@ -246,7 +252,8 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                 f.write(f"File URL: {file_url}\n")
                 f.write("---\n")
 
-        details_file = os.path.join(item_dir, "details.txt")
+        
+        details_file = sanitize_directory_name(os.path.join(item_dir, "details.txt"))
         with open(details_file, "a", encoding='utf-8') as f:
             f.write(f"Model URL: {model_url}\n")
             f.write(f"File Name: {file_name}\n")
@@ -273,7 +280,7 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                     f.write(f"Image URL: {image_url}\n")
                     f.write("---\n")
 
-            details_file = os.path.join(item_dir, "details.txt")
+            details_file = sanitize_directory_name(os.path.join(item_dir, "details.txt"))
             with open(details_file, "a", encoding='utf-8') as f:
                 f.write(f"Image ID: {image_id}\n")
                 f.write(f"Image URL: {image_url}\n")
