@@ -22,11 +22,13 @@ model_downloads/
 │   │   ├── model1/
 │   │   │   ├── file1.safetensors
 │   │   │   ├── image1.jpeg
-│   │   │   └── details.txt
+│   │   │   ├── details.txt
+│   │   │   └── description.html
 │   │   └── model2/
 │   │       ├── file3.safetensors
 │   │       ├── image2.jpeg
-│   │       └── details.txt
+│   │       ├── details.txt
+│   │       └── description.html
 │   ├── Checkpoints/
 │   ├── Embeddings/
 │   ├── Training_Data/
