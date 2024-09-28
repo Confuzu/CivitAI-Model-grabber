@@ -127,6 +127,11 @@ You can create your API Key here
 
  # Updates & Bugfixes
 
+# 0.5 New Feature 
+**Model Description Files**
+- These files contain the original description of the model as provided by the creator.
+- Description files are saved in the same directory as the corresponding model files.
+
 # 0.4 New Features & Updates & Bugfixes 
 
 ### New features:
