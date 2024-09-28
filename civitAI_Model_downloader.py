@@ -187,6 +187,9 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     model_images = {}
     item_dir = None
 
+    # Extract the description
+    description = item.get('description', '')
+
     for file in files:
         file_name = file.get('name', '')
         file_url = file.get('downloadUrl', '')
@@ -231,6 +234,11 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                 f.write("---\n")
             return item_name, False, model_images
 
+        # Create and write to the description file
+        description_file = os.path.join(item_dir, "description.html")
+        with open(description_file, "w", encoding='utf-8') as f:
+            f.write(description)
+
         if '?' in file_url:
             file_url += f"&token={token}&nsfw=true"
         else:
@@ -252,7 +260,6 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                 f.write(f"File URL: {file_url}\n")
                 f.write("---\n")
 
-        
         details_file = sanitize_directory_name(os.path.join(item_dir, "details.txt"))
         with open(details_file, "a", encoding='utf-8') as f:
             f.write(f"Model URL: {model_url}\n")
