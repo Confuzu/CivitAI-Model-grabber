@@ -187,13 +187,15 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     model_images = {}
     item_dir = None
 
-    # Extract the description
+    # Extract the description and baseModel
     description = item.get('description', '')
+    base_model = item.get('baseModel')
 
     for file in files:
         file_name = file.get('name', '')
         file_url = file.get('downloadUrl', '')
 
+        # Determine subfolder (existing logic)
         if file_name.endswith('.zip'):
             if 'type' in item and item['type'] == 'LORA':
                 subfolder = 'Lora'
@@ -224,10 +226,18 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
         if download_type != 'All' and download_type != subfolder:
             continue
 
-        item_dir = os.path.join(OUTPUT_DIR, username, subfolder, item_name_sanitized)
+        # Create folder structure
+        if base_model:
+            item_dir = os.path.join(OUTPUT_DIR, username, subfolder, base_model, item_name_sanitized)
+            logging.info(f"Using baseModel folder structure for {item_name}: {base_model}")
+        else:
+            item_dir = os.path.join(OUTPUT_DIR, username, subfolder, item_name_sanitized)
+            logging.info(f"No baseModel found for {item_name}, using standard folder structure")
+
         try:
             os.makedirs(item_dir, exist_ok=True)
         except OSError as e:
+            logging.error(f"Error creating directory for {item_name}: {str(e)}")
             with open(failed_downloads_file, "a", encoding='utf-8') as f:
                 f.write(f"Item Name: {item_name}\n")
                 f.write(f"Model URL: {model_url}\n")
@@ -374,7 +384,11 @@ def process_username(username, download_type):
             downloaded_item_names.add(item_name)
 
             for version in model_versions:
-                future = executor.submit(download_model_files, item_name, version, item, download_type, failed_downloads_file)
+                # Include baseModel in the item dictionary
+                item_with_base_model = item.copy()
+                item_with_base_model['baseModel'] = version.get('baseModel')
+                
+                future = executor.submit(download_model_files, item_name, version, item_with_base_model, download_type, failed_downloads_file)
                 download_futures.append(future)
 
         for future in tqdm(download_futures, desc="Downloading Files", unit="file", leave=False):
