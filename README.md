@@ -148,7 +148,7 @@ You can create your API Key here
 # 0.5 New Feature 
 **Model Description Files**
 - These files contain the original description of the model as provided by the creator.
-- Description files are saved in the same directory as the corresponding model files.
+- Description files which are HTML files that can be opened directly in a browser, saving the original descriptions provided by creators in the same directory as the corresponding model files.
 
 # 0.4 New Features & Updates & Bugfixes 
 
