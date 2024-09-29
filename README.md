@@ -19,17 +19,25 @@ The downloaded files will be organized in the following structure:
 model_downloads/
 ├── username1/
 │   ├── Lora/
-│   │   ├── model1/
-│   │   │   ├── file1.safetensors
-│   │   │   ├── image1.jpeg
-│   │   │   ├── details.txt
-│   │   │   └── description.html
-│   │   └── model2/
-│   │       ├── file3.safetensors
-│   │       ├── image2.jpeg
-│   │       ├── details.txt
-│   │       └── description.html
+│   │   ├── SDXL 1.0/
+│   │   │   └── model1/
+│   │   │       ├── file1.safetensors
+│   │   │       ├── image1.jpeg
+│   │   │       ├── details.txt
+│   │   │       └── description.html
+│   │   └── SD 1.5/
+│   │       └── model2/
+│   │           ├── file3.safetensors
+│   │           ├── image2.jpeg
+│   │           ├── details.txt
+│   │           └── description.html
 │   ├── Checkpoints/
+│   │   ├── FLUX/
+│   │   │   └── model1/
+│   │   │       ├── file.safetensors
+│   │   │       ├── image.jpeg
+│   │   │       ├── details.txt
+│   │   │       └── description.html       
 │   ├── Embeddings/
 │   ├── Training_Data/
 │   └── Other/
@@ -128,6 +136,14 @@ You can create your API Key here
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
 
  # Updates & Bugfixes
+
+# 0.6 New Feature
+**Base Model Folder Organization**
+- Implemented a new folder structure that organizes downloads based on their base model.
+- Downloads are now sorted into subfolders named after their respective base models within each category (Lora, Checkpoints, etc.).
+- This organization applies to all categories when base model information is available.
+- Folders for categories without base model information remain unchanged
+- Improved logging to track base model usage and any related issues.
 
 # 0.5 New Feature 
 **Model Description Files**
