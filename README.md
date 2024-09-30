@@ -137,6 +137,13 @@ You can create your API Key here
 
  # Updates & Bugfixes
 
+# 0.7 New Feature
+**Triggerwords text File**
+- Added functionality to create a "triggerWords.txt" file for each model.
+- This file contains the trigger words associated with the model.
+- The "trainedWords.txt" file is saved in the same directory as the model files.
+
+
 # 0.6 New Feature
 **Base Model Folder Organization**
 - Implemented a new folder structure that organizes downloads based on their base model.
