@@ -20,9 +20,13 @@ MAX_PATH_LENGTH = 200
 VALID_DOWNLOAD_TYPES = ['Lora', 'Checkpoints', 'Embeddings', 'Training_Data', 'Other', 'All']
 BASE_URL = "https://civitai.com/api/v1/models"
 
-# Logging configuration
-logging.basicConfig(filename=LOG_FILE_PATH, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', encoding='utf-8')
-logger = logging.getLogger(__name__)
+logger_md = logging.getLogger('md')
+logger_md.setLevel(logging.DEBUG)
+file_handler_md = logging.FileHandler(LOG_FILE_PATH, encoding='utf-8')
+file_handler_md.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler_md.setFormatter(formatter)
+logger_md.addHandler(file_handler_md)
 
 # Argument parsing
 parser = argparse.ArgumentParser(description="Download model files and images from Civitai API.")
@@ -190,6 +194,8 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     # Extract the description and baseModel
     description = item.get('description', '')
     base_model = item.get('baseModel')
+    trigger_words =  model_version.get('trainedWords', [])
+    
 
     for file in files:
         file_name = file.get('name', '')
@@ -248,6 +254,12 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
         description_file = os.path.join(item_dir, "description.html")
         with open(description_file, "w", encoding='utf-8') as f:
             f.write(description)
+
+
+        trigger_words_file = os.path.join(item_dir, "triggerWords.txt")
+        with open(trigger_words_file, "w", encoding='utf-8') as f:
+            for word in trigger_words:
+                f.write(f"{word}\n")
 
         if '?' in file_url:
             file_url += f"&token={token}&nsfw=true"
