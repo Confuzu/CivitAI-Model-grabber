@@ -24,12 +24,14 @@ model_downloads/
 │   │   │       ├── file1.safetensors
 │   │   │       ├── image1.jpeg
 │   │   │       ├── details.txt
+│   │   │       ├── triggerWords.txt
 │   │   │       └── description.html
 │   │   └── SD 1.5/
 │   │       └── model2/
 │   │           ├── file3.safetensors
 │   │           ├── image2.jpeg
 │   │           ├── details.txt
+│   │   │       ├── triggerWords.txt
 │   │           └── description.html
 │   ├── Checkpoints/
 │   │   ├── FLUX/
@@ -37,6 +39,7 @@ model_downloads/
 │   │   │       ├── file.safetensors
 │   │   │       ├── image.jpeg
 │   │   │       ├── details.txt
+│   │   │       ├── triggerWords.txt
 │   │   │       └── description.html       
 │   ├── Embeddings/
 │   ├── Training_Data/
