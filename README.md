@@ -144,7 +144,7 @@ You can create your API Key here
 **Triggerwords text File**
 - Added functionality to create a "triggerWords.txt" file for each model.
 - This file contains the trigger words associated with the model.
-- The "trainedWords.txt" file is saved in the same directory as the model files.
+- The "triggerWords.txt" file is saved in the same directory as the model files.
 
 
 # 0.6 New Feature
