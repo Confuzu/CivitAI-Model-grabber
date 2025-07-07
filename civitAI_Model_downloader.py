@@ -192,7 +192,7 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     item_dir = None
 
     # Extract the description and baseModel
-    description = item.get('description', '')
+    description = item.get('description') or ''
     base_model = item.get('baseModel')
     trigger_words =  model_version.get('trainedWords', [])
     
