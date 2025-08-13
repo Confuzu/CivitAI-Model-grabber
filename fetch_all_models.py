@@ -51,7 +51,13 @@ def fetch_all_models(token, username):
 
     while next_page:
         response = requests.get(next_page)
+        
         data = response.json()
+        # Write each response as a JSON line (JSONL format)
+        with open(f"{username}_models.json", "a", encoding='utf-8') as file:
+            json.dump(data, file, ensure_ascii=False)
+            file.write('\n')  # Add newline to separate JSON objects
+            
         for item in data.get("items", []):
             try:
                 # Check for top-level categorization
