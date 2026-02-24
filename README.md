@@ -21,26 +21,35 @@ model_downloads/
 │   ├── Lora/
 │   │   ├── SDXL 1.0/
 │   │   │   └── model1/
-│   │   │       ├── file1.safetensors
-│   │   │       ├── image1.jpeg
-│   │   │       ├── details.txt
-│   │   │       ├── triggerWords.txt
-│   │   │       └── description.html
+│   │   │       ├── v1.0/
+│   │   │       │   ├── file1.safetensors
+│   │   │       │   ├── image1.jpeg
+│   │   │       │   ├── details.txt
+│   │   │       │   ├── triggerWords.txt
+│   │   │       │   └── description.html
+│   │   │       └── v2.0/
+│   │   │           ├── file1.safetensors
+│   │   │           ├── image2.jpeg
+│   │   │           ├── details.txt
+│   │   │           ├── triggerWords.txt
+│   │   │           └── description.html
 │   │   └── SD 1.5/
 │   │       └── model2/
-│   │           ├── file3.safetensors
-│   │           ├── image2.jpeg
-│   │           ├── details.txt
-│   │   │       ├── triggerWords.txt
-│   │           └── description.html
+│   │           └── v1.0/
+│   │               ├── file3.safetensors
+│   │               ├── image2.jpeg
+│   │               ├── details.txt
+│   │               ├── triggerWords.txt
+│   │               └── description.html
 │   ├── Checkpoints/
-│   │   ├── FLUX/
-│   │   │   └── model1/
-│   │   │       ├── file.safetensors
-│   │   │       ├── image.jpeg
-│   │   │       ├── details.txt
-│   │   │       ├── triggerWords.txt
-│   │   │       └── description.html       
+│   │   └── FLUX/
+│   │       └── model1/
+│   │           └── v1.0/
+│   │               ├── file.safetensors
+│   │               ├── image.jpeg
+│   │               ├── details.txt
+│   │               ├── triggerWords.txt
+│   │               └── description.html
 │   ├── Embeddings/
 │   ├── Training_Data/
 │   └── Other/
@@ -176,6 +185,8 @@ You can create your API Key here
 - Download results now distinguish between newly downloaded, skipped (already existed), and failed files instead of lumping skipped files into the failure count.
 - Token lookup now supports `CIVITAI_API_TOKEN` environment variable and `.env` file in addition to CLI arg and interactive prompt.
 - Usernames and download type are now entered interactively (comma-separated usernames)
+- Each version now gets its own directory with its own files, images, trigger words, and description. Falling back to the version ID if the name is empty.
+
 
 # 0.7 New Feature
 **Triggerwords text File**
