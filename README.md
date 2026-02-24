@@ -59,9 +59,23 @@ install Python3
 ```
 pip install -r requirements.txt
 ```
+
+**API Token Setup**
+
+The script needs a CivitAI API token. You can provide it in three ways:
+1. CLI argument: `--token YOUR_TOKEN`
+2. Environment variable: `.env` file in the scripts directory  `CIVITAI_API_TOKEN=YOUR_TOKEN`
+3. If none of the above are set, the script will prompt you securely (hidden input)
+
+Without a token, only public models can be downloaded. With a token, models behind the CivitAI login are also accessible.
+
 ```
-python civitAI_Model_downloader.py one or multiple usernames space separated
+python civitAI_Model_downloader.py
 ```
+The script will interactively prompt for:
+- **Username(s):** Enter one or multiple usernames separated by commas
+- **Download type:** Choose from Lora, Checkpoints, Embeddings, Training_Data, Other, or All  <br />
+
 You  can also  give the script this 5 extra Arguments
 ```
 --retry_delay 
@@ -91,9 +105,24 @@ You  can also  give the script this 5 extra Arguments
 --token 
 ```
 default=None
-+ "It will only Download the Public availabe Models"
-+ "Provide a Token and it can also Download those Models behind the CivitAI Login."
-+ If you forgot to Provide a Token the Script asks for your token.
+```
+--output-dir 
+```
+Output directory (default: model_downloads) <br />
+
+**Download Reporting**
+
+After each username, the script reports:
+```
+Results for username <name>:
+  Downloaded: 42
+  Skipped (already existed): 100
+  Failed: 2
+  Type filter skipped: 15
+```
+Re-running the script will skip files that already exist and only download new or previously failed files.<br />
+Files are downloaded to a temporary `.tmp` file first and renamed when finished. <br />
+This prevents partial files seen as finished if the download is interrupted.<br />
 
 **Helper script** `fetch_all_models.py`
 ```
@@ -139,6 +168,14 @@ You can create your API Key here
 ![API](https://github.com/Confuzu/CivitAI-Model-grabber/assets/133601702/bc126680-62bd-41db-8211-a47b55d5fd36)
 
  # Updates & Bugfixes
+
+# 0.8 Improvements
+
+- Downloads now write to a temporary `.tmp` file and  renamed on completion, prevents partial files seen as finished when the download is interrupted.
+- Replaced pagination with `paginate_api()` from `fetch_all_models.py`, gaining circular pagination detection, page limits, and URL validation.
+- Download results now distinguish between newly downloaded, skipped (already existed), and failed files instead of lumping skipped files into the failure count.
+- Token lookup now supports `CIVITAI_API_TOKEN` environment variable and `.env` file in addition to CLI arg and interactive prompt.
+- Usernames and download type are now entered interactively (comma-separated usernames)
 
 # 0.7 New Feature
 **Triggerwords text File**
