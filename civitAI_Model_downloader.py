@@ -379,6 +379,9 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     model_id = item.get('id', 'unknown')
     model_url = f"https://civitai.com/models/{model_id}"
     item_name_sanitized = sanitize_name(item_name, max_length=MAX_PATH_LENGTH)
+    version_name = sanitize_name(model_version.get('name', ''), max_length=MAX_PATH_LENGTH)
+    if not version_name:
+        version_name = str(model_version.get('id', 'unknown'))
     item_dir = None
     subfolder = None
 
@@ -404,14 +407,14 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
         if download_type != 'All' and download_type != subfolder:
             continue
 
-        # Create folder structure
+        # Create folder structure (version subdirectory prevents filename collisions across versions)
         try:
             if base_model:
-                item_dir = safe_path_join(output_dir, username, subfolder, base_model, item_name_sanitized)
-                logger_md.info(f"Using baseModel folder structure for {item_name}: {base_model}")
+                item_dir = safe_path_join(output_dir, username, subfolder, base_model, item_name_sanitized, version_name)
+                logger_md.info(f"Using baseModel folder structure for {item_name}: {base_model}/{version_name}")
             else:
-                item_dir = safe_path_join(output_dir, username, subfolder, item_name_sanitized)
-                logger_md.info(f"No baseModel found for {item_name}, using standard folder structure")
+                item_dir = safe_path_join(output_dir, username, subfolder, item_name_sanitized, version_name)
+                logger_md.info(f"No baseModel found for {item_name}, using standard folder structure/{version_name}")
         except ValueError as e:
             logger_md.error(f"Path traversal blocked for {item_name}: {e}")
             continue
