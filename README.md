@@ -83,7 +83,7 @@ python civitAI_Model_downloader.py
 ```
 The script will interactively prompt for:
 - **Username(s):** Enter one or multiple usernames separated by commas
-- **Download type:** Choose from Lora, Checkpoints, Embeddings, Training_Data, Other, or All  <br />
+- **Download type:** Choose from Lora, Checkpoints, Embeddings, Training_Data, Other, All, or All_except_Checkpoints  <br />
 
 You  can also  give the script this 5 extra Arguments
 ```
