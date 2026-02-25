@@ -241,7 +241,23 @@ def process_items(items, categorized_items, other_item_types):
                 logger.error(f"Category {category} exceeded max items, skipping")
                 continue
 
-            categorized_items[category].append(name)
+            # Extract model page URL
+            model_id = item.get("id")
+            model_url = f"https://civitai.com/models/{model_id}" if model_id else ""
+
+            # Extract download URLs from all versions
+            download_urls = []
+            for version in item.get("modelVersions", []):
+                for file in version.get("files", []):
+                    dl_url = file.get("downloadUrl", "")
+                    if dl_url:
+                        download_urls.append(dl_url)
+
+            categorized_items[category].append({
+                'name': name,
+                'model_url': model_url,
+                'download_urls': download_urls,
+            })
 
             # Check for deep nested "Training Data" files (with limit enforcement)
             training_data_files = search_for_training_data_files(item)
@@ -263,7 +279,7 @@ def process_items(items, categorized_items, other_item_types):
             if category == 'Other':
                 # Cap other_item_types to match MAX_ITEMS_PER_CATEGORY
                 if len(other_item_types) < MAX_ITEMS_PER_CATEGORY:
-                    other_item_types.append((name, item.get("type", None)))
+                    other_item_types.append((name, item.get("type", None), model_url, download_urls))
 
         except ValueError as e:
             # Expected: malformed data from API
@@ -334,11 +350,25 @@ def format_summary(categorized_items, other_item_types):
     for category, items in categorized_items.items():
         lines.append(f"\n{category}:\n")
         if category == 'Other':
-            for item_name, item_type in other_item_types:
+            for other_entry in other_item_types:
+                # Support both old (name, type) and new (name, type, url, dl_urls) tuples
+                item_name = other_entry[0]
+                item_type = other_entry[1]
                 lines.append(f"  {item_name} - Type: {item_type}\n")
+                if len(other_entry) > 2 and other_entry[2]:
+                    lines.append(f"    Model URL: {other_entry[2]}\n")
+                if len(other_entry) > 3:
+                    for dl_url in other_entry[3]:
+                        lines.append(f"    Download URL: {sanitize_url_for_logging(dl_url)}\n")
         else:
-            for item_name in items:
-                lines.append(f"  {item_name}\n")
+            for entry in items:
+                name = entry['name'] if isinstance(entry, dict) else entry
+                lines.append(f"  {name}\n")
+                if isinstance(entry, dict):
+                    if entry.get('model_url'):
+                        lines.append(f"    Model URL: {entry['model_url']}\n")
+                    for dl_url in entry.get('download_urls', []):
+                        lines.append(f"    Download URL: {sanitize_url_for_logging(dl_url)}\n")
 
     return ''.join(lines)
 
