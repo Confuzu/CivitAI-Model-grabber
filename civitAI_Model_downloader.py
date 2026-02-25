@@ -17,7 +17,7 @@ LOG_FILE_PATH = os.path.join(SCRIPT_DIR, "civitAI_Model_downloader.txt")
 OUTPUT_DIR = "model_downloads"
 MAX_PATH_LENGTH = 200
 MIN_SAFETENSORS_SIZE = 4 * 1024 * 1024  # 4 MB — typical minimum for valid safetensors
-VALID_DOWNLOAD_TYPES = ['Lora', 'Checkpoints', 'Embeddings', 'Training_Data', 'Other', 'All']
+VALID_DOWNLOAD_TYPES = ['Lora', 'Checkpoints', 'Embeddings', 'Training_Data', 'Other', 'All', 'All_except_Checkpoints']
 BASE_URL = "https://civitai.com/api/v1/models"
 ALLOWED_API_HOSTS = {'civitai.com', 'www.civitai.com'}
 
@@ -404,7 +404,10 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
         item_type = item.get('type')
         subfolder = determine_subfolder(file_name, item_type)
 
-        if download_type != 'All' and download_type != subfolder:
+        if download_type == 'All_except_Checkpoints':
+            if subfolder == 'Checkpoints':
+                continue
+        elif download_type != 'All' and download_type != subfolder:
             continue
 
         # Create folder structure (version subdirectory prevents filename collisions across versions)
@@ -538,6 +541,10 @@ def process_username(username, download_type, token, max_tries, retry_delay_val,
     if download_type == 'All':
         selected_type_count = total_items
         intentionally_skipped = 0
+    elif download_type == 'All_except_Checkpoints':
+        checkpoint_count = len(categorized_items.get('Checkpoints', []))
+        selected_type_count = total_items - checkpoint_count
+        intentionally_skipped = checkpoint_count
     else:
         selected_type_count = len(categorized_items.get(download_type, []))
         intentionally_skipped = total_items - selected_type_count
