@@ -109,6 +109,7 @@ You  can also  give the script this 5 extra Arguments
 + Embeddings
 + Training_Data
 + Other
++ All_except_Checkpoints
 + Default = All
 ```
 --token 
@@ -186,6 +187,7 @@ You can create your API Key here
 - Token lookup now supports `CIVITAI_API_TOKEN` environment variable and `.env` file in addition to CLI arg and interactive prompt.
 - Usernames and download type are now entered interactively (comma-separated usernames)
 - Each version now gets its own directory with its own files, images, trigger words, and description. Falling back to the version ID if the name is empty.
+- New Download Mode: All_except_Checkpoints
 
 
 # 0.7 New Feature
