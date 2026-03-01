@@ -365,6 +365,107 @@ def download_file_or_image(url, output_path, token, username, retry_count=0, max
                 pass
 
 
+def extract_image_meta(item):
+    """Extract the actual metadata dict from an API image item, handling nested structure.
+
+    CivitAI API changed structure from:
+        item["meta"] = {"prompt": "...", "Model": "..."}
+    To:
+        item["meta"] = {"id": 123, "meta": {"prompt": "...", "Model": "..."}}
+
+    This function handles both old and new structures.
+    Matches the logic in CivitAI_Image_grabber.
+    """
+    meta_field = item.get("meta")
+    if not meta_field or not isinstance(meta_field, dict):
+        return {}
+
+    # Check for new nested structure: meta.meta exists and contains generation params
+    nested_meta = meta_field.get("meta")
+    if nested_meta and isinstance(nested_meta, dict):
+        return nested_meta
+
+    # Old structure: check if prompt/Model exists at top level
+    if "prompt" in meta_field or "Model" in meta_field or "seed" in meta_field:
+        return meta_field
+
+    return {}
+
+
+def fetch_image_metadata(version_id, headers):
+    """Fetch image metadata (prompts, generation params) from the images API.
+
+    Args:
+        version_id: Model version ID to fetch images for
+        headers: Authorization headers dict
+
+    Returns:
+        dict: Mapping of image_id -> extracted meta dict. Empty dict on error.
+    """
+    if not version_id:
+        return {}
+
+    url = f"https://civitai.com/api/v1/images?modelVersionId={version_id}&nsfw=true"
+    session = get_session()
+    meta_by_id = {}
+
+    try:
+        response = session.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.exceptions.RequestException, ValueError) as e:
+        logger_md.warning(f"Could not fetch image metadata for version {version_id}: {e}")
+        return {}
+
+    for img in data.get('items', []):
+        img_id = img.get('id')
+        if img_id:
+            meta = extract_image_meta(img)
+            base_model = img.get('baseModel')
+            # Add Model from baseModel if missing (Bug #38 pattern from Image_grabber)
+            if meta and base_model and 'Model' not in meta:
+                meta = {'Model': base_model, **meta}
+            meta_by_id[img_id] = meta
+
+    return meta_by_id
+
+
+def write_image_meta_file(meta, image_id, item_dir, username):
+    """Write per-image metadata to a separate {image_id}_meta.txt file.
+
+    Matches the file format used by CivitAI_Image_grabber:
+    - {image_id}_meta.txt when metadata is available
+    - {image_id}_no_meta.txt with fallback URL when not
+
+    Args:
+        meta: Extracted metadata dict (from extract_image_meta)
+        image_id: Image ID (numeric or string)
+        item_dir: Directory to write the file in
+        username: Username for fallback URL
+    """
+    if meta and not all(str(v).strip() == '' for v in meta.values()):
+        filename = f"{image_id}_meta.txt"
+        content_lines = [f"{k}: {str(v) if v is not None else ''}" for k, v in meta.items()]
+    else:
+        filename = f"{image_id}_no_meta.txt"
+        content_lines = [
+            "No metadata available.",
+            f"URL: https://civitai.com/images/{image_id}?username={username}"
+        ]
+
+    try:
+        meta_path = safe_path_join(item_dir, filename)
+    except ValueError as e:
+        logger_md.error(f"Path traversal blocked for meta file {filename}: {e}")
+        return
+
+    try:
+        with open(meta_path, "w", encoding='utf-8') as f:
+            f.write("\n".join(content_lines))
+    except OSError as e:
+        logger_md.error(f"Error writing metadata file {meta_path}: {e}")
+
+
 def download_model_files(item_name, model_version, item, download_type, failed_downloads_file,
                          username, token, output_dir, max_retries, retry_delay, base_model=None):
     """Download related image and model files for each model version.
@@ -484,9 +585,25 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
             logger_md.error(f"Error writing details for {item_name}: {e}")
 
     if item_dir is not None:
-        for image in images:
-            image_id = image.get('id', '')
+        # Fetch image generation metadata (prompts, sampler, etc.) from images API
+        version_id = model_version.get('id')
+        image_headers = {}
+        if token:
+            image_headers["Authorization"] = f"Bearer {token}"
+        image_meta_by_id = fetch_image_metadata(version_id, image_headers)
+
+        for idx, image in enumerate(images):
             image_url = image.get('url', '')
+            if not image_url:
+                print(f"Invalid image entry (no URL): {image}")
+                continue
+
+            # Use image ID if available, otherwise derive from URL filename
+            image_id = image.get('id', '')
+            if not image_id:
+                # Extract filename from URL (e.g., "38543822.jpeg" from the URL path)
+                url_basename = os.path.basename(image_url.split('?')[0]).split('.')[0]
+                image_id = url_basename if url_basename else f"img_{idx}"
 
             image_filename_raw = f"{item_name_sanitized}_{image_id}_for_{file_name}.jpeg"
             image_filename_sanitized = sanitize_name(image_filename_raw, max_length=MAX_PATH_LENGTH, subfolder=subfolder)
@@ -495,10 +612,6 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                 image_path = safe_path_join(item_dir, image_filename_sanitized)
             except ValueError as e:
                 logger_md.error(f"Path traversal blocked for image {image_filename_raw}: {e}")
-                continue
-
-            if not image_id or not image_url:
-                print(f"Invalid image entry: {image}")
                 continue
 
             result = download_file_or_image(image_url, image_path, token, username,
@@ -510,7 +623,7 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                     f"Item Name: {item_name}\nImage URL: {sanitize_url_for_logging(image_url)}\n---\n"
                 )
 
-            # Write image details (thread-safe)
+            # Write image details to details.txt (thread-safe)
             details_file = os.path.join(item_dir, "details.txt")
             try:
                 _append_to_file_locked(
@@ -519,6 +632,11 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
                 )
             except OSError as e:
                 logger_md.error(f"Error writing image details for {item_name}: {e}")
+
+            # Write separate {image_id}_meta.txt file (matches Image_grabber format)
+            meta_key = int(image_id) if str(image_id).isdigit() else None
+            meta = image_meta_by_id.get(meta_key) if meta_key else None
+            write_image_meta_file(meta, image_id, item_dir, username)
 
     return item_name, counts
 
@@ -614,6 +732,90 @@ def process_username(username, download_type, token, max_tries, retry_delay_val,
     print(f"  Type filter skipped: {intentionally_skipped}")
 
 
+def fetch_model_by_id(model_id, headers):
+    """Fetch a single model by ID from the CivitAI API.
+
+    Returns:
+        tuple: (model data dict, error message or None)
+    """
+    url = f"{BASE_URL}/{model_id}"
+    session = get_session()
+    try:
+        response = session.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json(), None
+    except requests.exceptions.HTTPError as e:
+        status = getattr(e.response, 'status_code', 'unknown') if e.response else 'unknown'
+        if e.response is not None and e.response.status_code == 404:
+            return None, f"Model {model_id} not found."
+        return None, f"HTTP error {status} fetching model {model_id}."
+    except requests.exceptions.RequestException as e:
+        logger_md.error(f"Network error fetching model {model_id}: {type(e).__name__}")
+        return None, f"Network error fetching model {model_id}."
+    except requests.exceptions.JSONDecodeError:
+        return None, f"Invalid JSON response for model {model_id}."
+
+
+def process_model_ids(model_ids, download_type, token, max_tries, retry_delay_val, max_threads, output_dir):
+    """Fetch and download specific models by their IDs."""
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    failed_downloads_file = os.path.join(SCRIPT_DIR, "failed_downloads_by_id.txt")
+    with open(failed_downloads_file, "w", encoding='utf-8') as f:
+        f.write("Failed Downloads for Model IDs\n\n")
+
+    total_downloaded = 0
+    total_skipped = 0
+    total_failed = 0
+
+    for model_id in model_ids:
+        print(f"\nFetching model {model_id}...")
+        item, error = fetch_model_by_id(model_id, headers)
+        if error:
+            print(f"  Error: {error}")
+            continue
+
+        item_name = item.get('name')
+        if not item_name or not isinstance(item_name, str):
+            print(f"  Skipping model {model_id}: invalid name")
+            continue
+
+        creator = item.get('creator', {})
+        username = creator.get('username', 'unknown_user')
+        print(f"  Model: {item_name} (by {username})")
+
+        model_versions = item.get('modelVersions', [])
+        if not model_versions:
+            print(f"  No versions found for model {model_id}")
+            continue
+
+        with ThreadPoolExecutor(max_workers=max_threads) as executor:
+            download_futures = []
+            for version in model_versions:
+                future = executor.submit(
+                    download_model_files, item_name, version, item,
+                    download_type, failed_downloads_file, username, token, output_dir,
+                    max_tries, retry_delay_val, base_model=version.get('baseModel')
+                )
+                download_futures.append(future)
+
+            for future in tqdm(download_futures, desc=f"  Downloading {item_name}", unit="file", leave=False):
+                try:
+                    _, counts = future.result()
+                    total_downloaded += counts['downloaded']
+                    total_skipped += counts['skipped']
+                    total_failed += counts['failed']
+                except Exception as e:
+                    logger_md.exception(f"Unhandled error in download worker: {e}")
+
+    print(f"\nResults for model IDs:")
+    print(f"  Downloaded: {total_downloaded}")
+    print(f"  Skipped (already existed): {total_skipped}")
+    print(f"  Failed: {total_failed}")
+
+
 def get_token_securely(args_token):
     """Retrieve API token from args, environment variable, or secure prompt.
 
@@ -651,23 +853,51 @@ def main():
 
     token = get_token_securely(args.token)
 
-    print("Enter a username (or multiple usernames separated by commas):")
-    usernames_input = input("Username(s): ")
-    usernames = [u.strip() for u in usernames_input.split(',') if u.strip()]
+    print("Download mode: (1) By username  (2) By model ID")
+    mode = input("Select mode [1]: ").strip() or "1"
 
-    if not usernames:
-        print("No usernames provided. Exiting.")
-        sys.exit(1)
+    if mode == "2":
+        print("Enter model IDs separated by commas (e.g., 12345, 67890):")
+        ids_input = input("Model ID(s): ")
+        raw_ids = [s.strip() for s in ids_input.split(',') if s.strip()]
 
-    print(f"Select a download type from: {VALID_DOWNLOAD_TYPES}")
-    download_type = input("Download type: ").strip()
+        model_ids = []
+        for raw_id in raw_ids:
+            if not raw_id.isdigit():
+                print(f"Invalid model ID: {raw_id} (must be a number)")
+                sys.exit(1)
+            model_ids.append(int(raw_id))
 
-    if download_type not in VALID_DOWNLOAD_TYPES:
-        print(f"Invalid download type. Must be one of: {VALID_DOWNLOAD_TYPES}")
-        sys.exit(1)
+        if not model_ids:
+            print("No model IDs provided. Exiting.")
+            sys.exit(1)
 
-    for username in usernames:
-        process_username(username, download_type, token, args.max_retries, args.retry_delay, args.max_threads, args.output_dir)
+        print(f"Select a download type from: {VALID_DOWNLOAD_TYPES}")
+        download_type = input("Download type: ").strip()
+
+        if download_type not in VALID_DOWNLOAD_TYPES:
+            print(f"Invalid download type. Must be one of: {VALID_DOWNLOAD_TYPES}")
+            sys.exit(1)
+
+        process_model_ids(model_ids, download_type, token, args.max_retries, args.retry_delay, args.max_threads, args.output_dir)
+    else:
+        print("Enter a username (or multiple usernames separated by commas):")
+        usernames_input = input("Username(s): ")
+        usernames = [u.strip() for u in usernames_input.split(',') if u.strip()]
+
+        if not usernames:
+            print("No usernames provided. Exiting.")
+            sys.exit(1)
+
+        print(f"Select a download type from: {VALID_DOWNLOAD_TYPES}")
+        download_type = input("Download type: ").strip()
+
+        if download_type not in VALID_DOWNLOAD_TYPES:
+            print(f"Invalid download type. Must be one of: {VALID_DOWNLOAD_TYPES}")
+            sys.exit(1)
+
+        for username in usernames:
+            process_username(username, download_type, token, args.max_retries, args.retry_delay, args.max_threads, args.output_dir)
 
 
 if __name__ == "__main__":
