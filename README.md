@@ -24,12 +24,14 @@ model_downloads/
 │   │   │       ├── v1.0/
 │   │   │       │   ├── file1.safetensors
 │   │   │       │   ├── image1.jpeg
+│   │   │       │   ├── 12345_meta.txt    
 │   │   │       │   ├── details.txt
 │   │   │       │   ├── triggerWords.txt
 │   │   │       │   └── description.html
 │   │   │       └── v2.0/
 │   │   │           ├── file1.safetensors
 │   │   │           ├── image2.jpeg
+│   │   │           ├── 67890_meta.txt 
 │   │   │           ├── details.txt
 │   │   │           ├── triggerWords.txt
 │   │   │           └── description.html
@@ -188,6 +190,9 @@ You can create your API Key here
 - Usernames and download type are now entered interactively (comma-separated usernames)
 - Each version now gets its own directory with its own files, images, trigger words, and description. Falling back to the version ID if the name is empty.
 - New Download Mode: All_except_Checkpoints
+- Image generation metadata is now saved as separate `{image_id}_meta.txt` files per image, matching the format used by CivitAI_Image_grabber                                                          
+    Includes prompt, negative prompt, model, sampler, steps, CFG scale, seed, size, resources, and all other generation parameters                                                                       
+    Images without metadata get a `{image_id}_no_meta.txt` with a link to the image on CivitAI    
 
 
 # 0.7 New Feature
