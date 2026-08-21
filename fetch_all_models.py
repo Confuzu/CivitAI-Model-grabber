@@ -151,6 +151,26 @@ def categorize_item(item):
     return type_to_category.get(item_type, 'Other')
 
 
+def sanitize_base_model(base_model):
+    """Sanitize a base model name for safe use as a folder name component.
+
+    Models can mix different base models (e.g. Anima and Illustrious)
+    under one model URL. Keeping a clean, non-empty name per version
+    prevents mangled or truncated base-model folders (Issue #39).
+    """
+    if not isinstance(base_model, str):
+        return "Unknown"
+
+    safe = base_model.strip()
+    if not safe:
+        return "Unknown"
+
+    if len(safe) > MAX_NAME_LENGTH:
+        safe = safe[:MAX_NAME_LENGTH]
+
+    return safe
+
+
 def search_for_training_data_files(item):
     """Search for files with type 'Training Data' in the item's model versions.
 
@@ -245,18 +265,40 @@ def process_items(items, categorized_items, other_item_types):
             model_id = item.get("id")
             model_url = f"https://civitai.com/models/{model_id}" if model_id else ""
 
-            # Extract download URLs from all versions
+            # Extract download URLs from all versions. Keep the base model
+            # and download URLs associated with each version so models that
+            # mix base models (e.g. Anima and Illustrious) under one model
+            # URL keep a correct per-version structure (Issue #39).
             download_urls = []
+            versions = []
             for version in item.get("modelVersions", []):
+                version_name = version.get("name", "")
+                if not isinstance(version_name, str) or not version_name:
+                    version_name = str(version.get("id") or "unknown")
+                if len(version_name) > MAX_NAME_LENGTH:
+                    version_name = version_name[:MAX_NAME_LENGTH]
+
+                version_urls = []
                 for file in version.get("files", []):
                     dl_url = file.get("downloadUrl", "")
                     if dl_url:
                         download_urls.append(dl_url)
+                        version_urls.append(dl_url)
+
+                if not version_urls:
+                    continue
+
+                versions.append({
+                    'name': version_name,
+                    'base_model': sanitize_base_model(version.get("baseModel", "")),
+                    'download_urls': version_urls,
+                })
 
             categorized_items[category].append({
                 'name': name,
                 'model_url': model_url,
                 'download_urls': download_urls,
+                'versions': versions,
             })
 
             # Check for deep nested "Training Data" files (with limit enforcement)
@@ -367,8 +409,20 @@ def format_summary(categorized_items, other_item_types):
                 if isinstance(entry, dict):
                     if entry.get('model_url'):
                         lines.append(f"    Model URL: {entry['model_url']}\n")
-                    for dl_url in entry.get('download_urls', []):
-                        lines.append(f"    Download URL: {sanitize_url_for_logging(dl_url)}\n")
+                    versions = entry.get('versions') or []
+                    if versions:
+                        # List download URLs per version so each base model
+                        # stays associated with its own files (Issue #39)
+                        for version in versions:
+                            lines.append(
+                                f"    Version: {version.get('name', 'unknown')} "
+                                f"| Base Model: {version.get('base_model', 'Unknown')}\n"
+                            )
+                            for dl_url in version.get('download_urls', []):
+                                lines.append(f"    Download URL: {sanitize_url_for_logging(dl_url)}\n")
+                    else:
+                        for dl_url in entry.get('download_urls', []):
+                            lines.append(f"    Download URL: {sanitize_url_for_logging(dl_url)}\n")
 
     return ''.join(lines)
 
