@@ -102,17 +102,18 @@ You can download specific models directly by their CivitAI model ID instead of f
 
 **Optional CLI Arguments**
 ```
-username1 username2  Positional usernames, compatible with pre-0.8 CLI usage
---username NAMES     Username or comma-separated usernames
---model-ids IDS      Model ID or comma-separated model IDs
---download-type TYPE Download type: Lora, Checkpoints, Embeddings, Training_Data, Other, All, or All_except_Checkpoints
---base-model NAMES   Base model name or comma-separated names to include, e.g. "SDXL 1.0", "Flux", or "Illustrious"
---version            Print the script version and exit
+username1 username2   Positional usernames, compatible with pre-0.8 CLI usage
+--username NAMES      Username or comma-separated usernames
+--model-ids IDS       Model ID or comma-separated model IDs
+--download-type TYPE  Download type: Lora, Checkpoints, Embeddings, Training_Data, Other, All, or All_except_Checkpoints
+--base-model NAMES    Base model name or comma-separated names to include, e.g. "SDXL 1.0", "Flux", or "Illustrious"
+--version             Print the script version and exit
 --token TOKEN         CivitAI API token (prefer env var or .env file instead)
 --retry-delay N       Delay between retries in seconds (default: 10)
 --max-retries N       Maximum number of retries per file (default: 3)
 --max-threads N       Maximum concurrent downloads (default: 3, too many causes API failures)
 --output-dir DIR      Output directory (default: model_downloads)
+--max-filename-length Overrides the probe for setups where it cannot be measured.
 ```
 
 **Download Reporting**
@@ -181,6 +182,22 @@ You can create your API Key here
 
  # Updates & Bugfixes
 
+# 0.9.1  Bugfixes & Improvements
+
+**Folder Names Truncated by a Slash in the Model Name (Issue #39)**
+- Model names containing a `/`, e.g. `Hyouuma Style (Anima/Illustrious)`, were treated as filesystem paths, so only the part after the last slash survived and the folder ended up named `Illustrious)`. Image filenames built from the model name were truncated the same way.
+- Path separators are now replaced before the name is normalized, so the folder becomes `Hyouuma Style (Anima_Illustrious)`.
+
+**Existing Downloads Are Migrated, Not Fetched Again**
+- Downloads are skipped by comparing paths, so the corrected folder name would have made every file of an affected model count as missing.
+- Folders left by the previous version are renamed to their corrected name, including the preview images that carry the model name in their own filename.
+- A folder is only renamed when it clearly belongs to one model. Under the old naming several models could share one folder, e.g. `Hyouuma Style (Anima/Illustrious)` and `Anus Outline / Visible Through Clothes / Covered Anus (Anima/Illustrious)` both became `Illustrious)`.
+- Such folders, folders holding versions the model does not have, and existing target folders are reported and left untouched for manual sorting.
+
+**Filename Length Limit Is now Detected and Enforced**
+- The limit is no longer assumed: it is probed once per run against the output directory, because it differs between filesystems. The `.tmp` suffix used for atomic downloads is reserved.
+- Only names the filesystem genuinely cannot store are shortened, so names that work today keep their path and stay recognized as already downloaded. Shortening happens on UTF-8 character boundaries and is reported once per name, with the original and the shortened form.
+- `--max-filename-length` overrides the probe for setups where it cannot be measured.
 
 # 0.9 Improvements
 
