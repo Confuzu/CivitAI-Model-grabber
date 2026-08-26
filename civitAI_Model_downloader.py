@@ -8,7 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import time
 import argparse
-from fetch_all_models import fetch_all_models, paginate_api, sanitize_url_for_logging, WINDOWS_RESERVED_NAMES
+import errno
+import tempfile
+from fetch_all_models import (fetch_all_models, paginate_api, sanitize_url_for_logging,
+                              WINDOWS_RESERVED_NAMES, load_env_file)
 import sys
 
 # Constants
@@ -17,6 +20,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE_PATH = os.path.join(SCRIPT_DIR, "civitAI_Model_downloader.txt")
 OUTPUT_DIR = "model_downloads"
 MAX_PATH_LENGTH = 200
+TEMP_SUFFIX = '.tmp'
+# Most filesystems allow 255 bytes per name, but not all: an encrypted home
+# (ecryptfs) caps them at 143. The real limit is probed at startup and can be
+# overridden with --max-filename-length.
+DEFAULT_FILENAME_LENGTH_LIMIT = 255
+MIN_FILENAME_LENGTH_LIMIT = 20
+FILENAME_LENGTH_LIMIT = DEFAULT_FILENAME_LENGTH_LIMIT
 MIN_SAFETENSORS_SIZE = 4 * 1024 * 1024  # 4 MB — typical minimum for valid safetensors
 VALID_DOWNLOAD_TYPES = ['Lora', 'Checkpoints', 'Embeddings', 'Training_Data', 'Other', 'All', 'All_except_Checkpoints']
 BASE_URL = "https://civitai.com/api/v1/models"
@@ -136,38 +146,315 @@ def sanitize_filename_strict(filename):
 
 
 
+def detect_max_filename_length(directory, upper_bound=DEFAULT_FILENAME_LENGTH_LIMIT):
+    """Probe how long a single filename may be inside `directory`.
+
+    Filesystems disagree: ext4 allows 255 bytes, an ecryptfs-encrypted home
+    only 143. Probing avoids guessing wrong on the user's machine.
+
+    Returns:
+        int: the largest accepted name length, or `upper_bound` if the
+             directory cannot be probed.
+    """
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError as e:
+        logger_md.warning(f"Cannot probe filename length in {directory}: {e}")
+        return upper_bound
+
+    def accepts(length):
+        path = os.path.join(directory, 'p' * length)
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except OSError as e:
+            if e.errno == errno.ENAMETOOLONG:
+                return False
+            raise
+        os.close(fd)
+        os.remove(path)
+        return True
+
+    try:
+        if accepts(upper_bound):
+            return upper_bound
+        low, high = MIN_FILENAME_LENGTH_LIMIT, upper_bound
+        while low < high:
+            mid = (low + high + 1) // 2
+            if accepts(mid):
+                low = mid
+            else:
+                high = mid - 1
+        return low
+    except OSError as e:
+        logger_md.warning(f"Cannot probe filename length in {directory}: {e}")
+        return upper_bound
+
+
+def configure_filename_length_limit(output_dir, override=None):
+    """Set the global filename budget, leaving room for the .tmp suffix."""
+    global FILENAME_LENGTH_LIMIT
+
+    if override:
+        detected = override
+        source = "set via --max-filename-length"
+    else:
+        detected = detect_max_filename_length(output_dir)
+        source = "detected"
+
+    # Downloads are written as "<name>.tmp" first, so that suffix has to fit too.
+    FILENAME_LENGTH_LIMIT = max(MIN_FILENAME_LENGTH_LIMIT, detected - len(TEMP_SUFFIX))
+
+    message = (f"Filename length limit for {output_dir}: {detected} characters "
+               f"({source}); names are shortened to {FILENAME_LENGTH_LIMIT} "
+               f"to leave room for the {TEMP_SUFFIX} suffix.")
+    print(message)
+    logger_md.info(message)
+    return FILENAME_LENGTH_LIMIT
+
+
+_truncation_lock = threading.Lock()
+_truncated_names = set()
+
+
+def _report_truncation(original, shortened):
+    """Tell the user once per name that it had to be shortened."""
+    with _truncation_lock:
+        if original in _truncated_names:
+            return
+        _truncated_names.add(original)
+
+    message = (f"Name too long for this filesystem (limit {FILENAME_LENGTH_LIMIT} "
+               f"characters), shortened: {original!r} -> {shortened!r}")
+    print(f"Note: {message}")
+    logger_md.warning(message)
+
+
+def _truncate_to_bytes(text, max_bytes):
+    """Cut `text` so its UTF-8 encoding fits into `max_bytes`."""
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text
+    return encoded[:max_bytes].decode('utf-8', 'ignore')
+
+
 def sanitize_name(name, max_length=MAX_PATH_LENGTH, subfolder=None, output_dir=None, username=None):
     """Sanitize a name for use as a file or folder name."""
     base_name, extension = os.path.splitext(name)
 
-    # Normalize and check for path traversal
+    # Normalize and check for path traversal.
+    base_name = base_name.replace('/', '_').replace(os.sep, '_')
+    if os.altsep:
+        base_name = base_name.replace(os.altsep, '_')
     base_name = os.path.basename(base_name)  # Strip any directory components
-    if base_name.startswith('..') or os.path.isabs(base_name):
+    if base_name and (base_name.strip('.') == '' or os.path.isabs(base_name)):
         base_name = 'invalid_name'
 
     # Remove problematic characters and control characters
     base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', base_name)
 
-    # Handle reserved names (full Windows set)
-    if base_name.upper() in WINDOWS_RESERVED_NAMES:
-        base_name = '_'
-
     # Reduce multiple underscores to single and trim leading/trailing underscores and dots
     base_name = re.sub(r'__+', '_', base_name).strip('_.')
 
-    # Calculate max length of base name considering the path length
+    # Handle reserved names (full Windows set). This runs after the strip
+    # above: a bare '_' replacement would be stripped again and leave an
+    # empty path component, silently merging two models into one folder.
+    if base_name.upper() in WINDOWS_RESERVED_NAMES:
+        base_name = f"{base_name}_file"
+
+    # A non-empty input must never sanitize down to nothing, otherwise
+    # os.path.join() drops the component and unrelated models collide.
+    if name.strip() and not base_name:
+        base_name = 'unnamed'
+
+    # Enforce the length budget. This used to run only when the caller passed
+    # subfolder, output_dir and username together, which no call site did, so
+    # no name was ever shortened and long names failed with ENAMETOOLONG.
+    # The budget is the filesystem limit, not MAX_PATH_LENGTH: names between
+    # MAX_PATH_LENGTH and the filesystem limit are written fine today, and
+    # shortening them would change their path. Downloads are skipped by path
+    # comparison, so a renamed file counts as missing and is fetched again.
+    budget = FILENAME_LENGTH_LIMIT - len(extension.encode('utf-8'))
     if subfolder and output_dir and username:
         # Include path separator before filename in calculation
         path_length = len(os.path.join(output_dir, username, subfolder)) + len(os.sep)
-        max_base_length = max_length - len(extension) - path_length
-        if max_base_length > 0:
-            base_name = base_name[:max_base_length].rsplit('_', 1)[0]
-        else:
-            logger_md.error(f"Path too long for {username}/{subfolder}, cannot fit filename")
-            base_name = base_name[:10]  # Fallback to very short name
+        budget = min(budget, max_length - len(extension) - path_length)
 
-    sanitized_name = base_name + extension
-    return sanitized_name.strip()
+    if budget < MIN_FILENAME_LENGTH_LIMIT:
+        logger_md.error(f"Path too long for {username}/{subfolder}, cannot fit filename")
+        budget = MIN_FILENAME_LENGTH_LIMIT
+
+    if len(base_name.encode('utf-8')) > budget:
+        shortened = _truncate_to_bytes(base_name, budget).rstrip('_. ')
+        _report_truncation(name, shortened + extension)
+        base_name = shortened
+
+    sanitized_name = (base_name + extension).strip()
+
+    # Windows silently drops trailing dots and spaces from file and folder
+    # names, so "Cool Lora." on disk becomes "Cool Lora" and no longer matches
+    # the path the script just built. Trim them here instead.
+    sanitized_name = sanitized_name.rstrip('. ')
+
+    # The trim must not empty out a name that had content.
+    if name.strip() and not sanitized_name:
+        sanitized_name = 'unnamed'
+
+    return sanitized_name
+
+
+_migration_lock = threading.Lock()
+_migrated_dirs = set()
+
+
+def legacy_sanitize_name(name):
+    """Reproduce the pre-fix sanitize_name() so its folders can be found.
+
+    The old version called os.path.basename() before replacing separators,
+    so a model name containing a slash was reduced to its last component
+    (Issue #39). Knowing that name lets the script rename the old folder
+    instead of downloading everything again.
+    """
+    base_name, extension = os.path.splitext(name)
+    base_name = os.path.basename(base_name)
+    if base_name.startswith('..') or os.path.isabs(base_name):
+        base_name = 'invalid_name'
+    base_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', base_name)
+    if base_name.upper() in WINDOWS_RESERVED_NAMES:
+        base_name = '_'
+    base_name = re.sub(r'__+', '_', base_name).strip('_.')
+    return (base_name + extension).strip()
+
+
+def _rename_legacy_prefixed_files(directory, legacy_name, new_name, subfolder):
+    """Rename files whose name starts with the old truncated model name.
+
+    Preview images are stored as "<model name>_<image id>_for_<file>.jpeg",
+    so they carry the truncated name too and would otherwise be downloaded
+    again after the folder itself was migrated.
+    """
+    renamed = 0
+    prefix = legacy_name + '_'
+    for root, _dirs, files in os.walk(directory):
+        for file_name in files:
+            if not file_name.startswith(prefix):
+                continue
+            remainder = file_name[len(legacy_name):]
+            target = sanitize_name(new_name + remainder, max_length=MAX_PATH_LENGTH, subfolder=subfolder)
+            if target == file_name:
+                continue
+            source_path = os.path.join(root, file_name)
+            target_path = os.path.join(root, target)
+            if os.path.exists(target_path):
+                continue
+            try:
+                os.rename(source_path, target_path)
+                renamed += 1
+            except OSError as e:
+                logger_md.error(f"Could not rename {source_path}: {e}")
+    return renamed
+
+
+_legacy_name_owners = {}
+
+
+def register_models_for_migration(item_names):
+    """Record which model names collapse to the same pre-fix folder name.
+
+    Several names could produce the same truncated name, e.g. both
+    "Hyouuma Style (Anima/Illustrious)" and "Anus Outline / ... (Anima/
+    Illustrious)" became "Illustrious)". Those models shared one folder, so
+    that folder must not be handed to whichever model is processed first.
+    """
+    with _migration_lock:
+        for item_name in item_names:
+            if not item_name or not isinstance(item_name, str):
+                continue
+            legacy_name = legacy_sanitize_name(item_name)
+            if legacy_name:
+                _legacy_name_owners.setdefault(legacy_name, set()).add(item_name)
+
+
+def expected_version_dir_names(item):
+    """Version folder names this model would create, used to spot foreign data."""
+    names = set()
+    for version in item.get('modelVersions', []):
+        version_name = sanitize_name(version.get('name', ''), max_length=MAX_PATH_LENGTH)
+        if not version_name:
+            version_name = str(version.get('id', 'unknown'))
+        names.add(version_name)
+    return names
+
+
+def migrate_legacy_item_folder(parent_dir, item_name, new_name, subfolder=None, item=None):
+    """Rename a folder left behind by the truncating sanitize_name (Issue #39).
+
+    Downloads are skipped by path comparison, so without this every file of an
+    affected model would be fetched again under its corrected name.
+
+    The folder is only renamed when it can be attributed to this model alone:
+    no other known model name maps to it, and it holds no version folders this
+    model does not have. Otherwise it is left untouched and reported, because
+    a shared folder already contains mixed data that cannot be separated
+    reliably.
+
+    Returns:
+        bool: True when a folder was migrated.
+    """
+    legacy_name = legacy_sanitize_name(item_name)
+    if not legacy_name or legacy_name == new_name:
+        return False
+
+    old_path = os.path.join(parent_dir, legacy_name)
+    new_path = os.path.join(parent_dir, new_name)
+
+    with _migration_lock:
+        if old_path in _migrated_dirs:
+            return False
+        _migrated_dirs.add(old_path)
+
+        if not os.path.isdir(old_path):
+            return False
+
+        if os.path.exists(new_path):
+            message = (f"Not migrating {old_path}: {new_path} already exists. "
+                       f"Merge or remove one of them manually.")
+            print(f"Note: {message}")
+            logger_md.warning(message)
+            return False
+
+        owners = _legacy_name_owners.get(legacy_name, set())
+        if len(owners) > 1:
+            message = (f"Not migrating {old_path}: {len(owners)} models share this "
+                       f"folder name from the older version, so its contents are "
+                       f"already mixed. Sort it out manually or delete it.")
+            print(f"Note: {message}")
+            logger_md.warning(message)
+            return False
+
+        if item is not None:
+            expected = expected_version_dir_names(item)
+            foreign = {entry for entry in os.listdir(old_path)
+                       if os.path.isdir(os.path.join(old_path, entry)) and entry not in expected}
+            if foreign:
+                message = (f"Not migrating {old_path}: it holds version folders this "
+                           f"model does not have ({', '.join(sorted(foreign))}), so it "
+                           f"belongs to more than one model.")
+                print(f"Note: {message}")
+                logger_md.warning(message)
+                return False
+
+        try:
+            os.rename(old_path, new_path)
+        except OSError as e:
+            logger_md.error(f"Could not migrate {old_path}: {e}")
+            return False
+
+    renamed = _rename_legacy_prefixed_files(new_path, legacy_name, new_name, subfolder)
+    message = (f"Migrated folder left by an older version: {legacy_name!r} -> "
+               f"{new_name!r} ({renamed} files renamed, nothing re-downloaded)")
+    print(f"Note: {message}")
+    logger_md.info(message)
+    return True
 
 
 def determine_subfolder(file_name, item_type):
@@ -246,7 +533,7 @@ def download_file_or_image(url, output_path, token, username, retry_count=0, max
     if os.path.exists(output_path):
         return "skipped"
 
-    temp_path = output_path + '.tmp'
+    temp_path = output_path + TEMP_SUFFIX
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     progress_bar = None
 
@@ -484,6 +771,9 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
     version_name = sanitize_name(model_version.get('name', ''), max_length=MAX_PATH_LENGTH)
     if not version_name:
         version_name = str(model_version.get('id', 'unknown'))
+    # baseModel comes straight from the API and is used as a folder name,
+    # so it needs the same sanitizing as the model and version names.
+    base_model_dir = sanitize_name(base_model, max_length=MAX_PATH_LENGTH) if base_model else None
     item_dir = None
     subfolder = None
 
@@ -512,11 +802,22 @@ def download_model_files(item_name, model_version, item, download_type, failed_d
         elif download_type != 'All' and download_type != subfolder:
             continue
 
+        # Rename folders created by the pre-fix version before building the
+        # path, so existing downloads are kept instead of fetched again.
+        try:
+            if base_model_dir:
+                parent_dir = safe_path_join(output_dir, username, subfolder, base_model_dir)
+            else:
+                parent_dir = safe_path_join(output_dir, username, subfolder)
+            migrate_legacy_item_folder(parent_dir, item_name, item_name_sanitized, subfolder, item)
+        except ValueError as e:
+            logger_md.error(f"Path traversal blocked while migrating {item_name}: {e}")
+
         # Create folder structure (version subdirectory prevents filename collisions across versions)
         try:
-            if base_model:
-                item_dir = safe_path_join(output_dir, username, subfolder, base_model, item_name_sanitized, version_name)
-                logger_md.info(f"Using baseModel folder structure for {item_name}: {base_model}/{version_name}")
+            if base_model_dir:
+                item_dir = safe_path_join(output_dir, username, subfolder, base_model_dir, item_name_sanitized, version_name)
+                logger_md.info(f"Using baseModel folder structure for {item_name}: {base_model_dir}/{version_name}")
             else:
                 item_dir = safe_path_join(output_dir, username, subfolder, item_name_sanitized, version_name)
                 logger_md.info(f"No baseModel found for {item_name}, using standard folder structure/{version_name}")
@@ -660,6 +961,13 @@ def process_username(username, download_type, token, max_tries, retry_delay_val,
     categorized_items = fetch_all_models(token, username)
     total_items = sum(len(items) for items in categorized_items.values())
 
+    # Know all model names before migrating folders, so a folder shared by
+    # several models under the pre-fix naming is recognised as ambiguous.
+    register_models_for_migration(
+        entry.get('name') if isinstance(entry, dict) else entry
+        for entries in categorized_items.values() for entry in entries
+    )
+
     if download_type == 'All':
         selected_type_count = total_items
         intentionally_skipped = 0
@@ -799,6 +1107,8 @@ def process_model_ids(model_ids, download_type, token, max_tries, retry_delay_va
             print(f"  Skipping model {model_id}: invalid name")
             continue
 
+        register_models_for_migration([item_name])
+
         creator = item.get('creator', {})
         username = creator.get('username', 'unknown_user')
         print(f"  Model: {item_name} (by {username})")
@@ -841,15 +1151,18 @@ def process_model_ids(model_ids, download_type, token, max_tries, retry_delay_va
 
 
 def get_token_securely(args_token):
-    """Retrieve API token from args, environment variable, or secure prompt.
+    """Retrieve API token from args, environment, .env file, or secure prompt.
 
-    Priority: CLI arg > environment variable > interactive prompt (hidden input)
+    Priority: CLI arg > environment variable > .env file > interactive prompt
     """
     if args_token:
         return args_token
 
-    # Try environment variable
+    # Try environment variable, then the .env file next to the script
     token = os.environ.get('CIVITAI_API_TOKEN')
+    if not token:
+        load_env_file(SCRIPT_DIR)
+        token = os.environ.get('CIVITAI_API_TOKEN')
     if token:
         return token
 
@@ -949,6 +1262,9 @@ def main():
     parser.add_argument('--retry-delay', '--retry_delay', dest='retry_delay', type=int, default=10, help='Delay between retries in seconds (default: 10)')
     parser.add_argument('--max-threads', '--max_threads', dest='max_threads', type=int, default=3, help='Maximum number of concurrent downloads (default: 3)')
     parser.add_argument('--output-dir', type=str, default=OUTPUT_DIR, help=f'Output directory (default: {OUTPUT_DIR})')
+    parser.add_argument('--max-filename-length', '--max_filename_length', dest='max_filename_length', type=int,
+                        help='Maximum filename length the target filesystem accepts. Probed automatically when omitted '
+                             '(255 on most filesystems, 143 on an ecryptfs-encrypted home).')
 
     args = parser.parse_args()
 
@@ -959,6 +1275,12 @@ def main():
     if usernames and model_ids:
         print("Error: choose either usernames or model IDs, not both.")
         sys.exit(1)
+
+    if args.max_filename_length is not None and args.max_filename_length < MIN_FILENAME_LENGTH_LIMIT:
+        print(f"Error: --max-filename-length must be at least {MIN_FILENAME_LENGTH_LIMIT}.")
+        sys.exit(1)
+
+    configure_filename_length_limit(args.output_dir, args.max_filename_length)
 
     token = get_token_securely(args.token)
 
