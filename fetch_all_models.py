@@ -459,10 +459,57 @@ def fetch_all_models(token, username):
     return categorized_items
 
 
+ENV_FILE_NAME = '.env'
+
+
+def load_env_file(directory=None):
+    """Read KEY=VALUE pairs from a .env file into the environment.
+
+    Values already present in the environment win, so an exported variable
+    still overrides the file. Returns the keys that were loaded.
+    """
+    directory = directory or os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(directory, ENV_FILE_NAME)
+    if not os.path.isfile(env_path):
+        return []
+
+    try:
+        mode = os.stat(env_path).st_mode
+        if mode & 0o077:
+            print(f"Warning: {env_path} is readable by other users. "
+                  f"Restrict it with: chmod 600 {ENV_FILE_NAME}")
+    except OSError:
+        pass
+
+    loaded = []
+    try:
+        with open(env_path, encoding='utf-8') as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                if line.startswith('export '):
+                    line = line[len('export '):]
+                key, _, value = line.partition('=')
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if not key or key in os.environ:
+                    continue
+                os.environ[key] = value
+                loaded.append(key)
+    except OSError as e:
+        logger.warning(f"Could not read {env_path}: {e}")
+
+    return loaded
+
+
 def get_token_securely():
-    """Retrieve API token from environment variable or secure prompt."""
-    # First try environment variable
+    """Retrieve API token from environment variable, .env file or secure prompt."""
+    # First try environment variable, then the .env file next to the script
     token = os.environ.get('CIVITAI_API_TOKEN')
+    if not token:
+        load_env_file()
+        token = os.environ.get('CIVITAI_API_TOKEN')
     if token:
         return token
 
