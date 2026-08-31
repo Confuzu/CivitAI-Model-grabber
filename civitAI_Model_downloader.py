@@ -15,7 +15,7 @@ from fetch_all_models import (fetch_all_models, paginate_api, sanitize_url_for_l
 import sys
 
 # Constants
-VERSION = "0.9"
+VERSION = "0.9.1"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE_PATH = os.path.join(SCRIPT_DIR, "civitAI_Model_downloader.txt")
 OUTPUT_DIR = "model_downloads"
